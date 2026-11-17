@@ -1,3 +1,4 @@
+from ai_helper import ask_gemini
 import os
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -105,6 +106,26 @@ bot = CountdownBot()
 @bot.event
 async def on_ready():
     print(f"ログインしました: {bot.user}")
+@bot.tree.command(name="ai", description="Gemini AIに質問や相談をします")
+@app_commands.describe(
+    prompt="AIに聞きたいこと・お願いしたいこと",
+    character="AIの口調やキャラ設定（例: 関西弁、ギャル、プロのコーチ ※省略可）"
+)
+async def ai_chat(interaction: discord.Interaction, prompt: str, character: str = "フレンドリーな友達"):
+    await interaction.response.defer()
+
+    answer = await ask_gemini(prompt, character)
+    if len(answer) > 3800:
+        answer = answer[:3800] + "\n...（長すぎるため省略しました）"
+
+    embed = discord.Embed(
+        title="✨ Gemini AI の回答",
+        description=answer,
+        color=discord.Color.purple()
+    )
+    embed.add_field(name="💬 質問内容", value=prompt[:1000], inline=False)
+    embed.set_footer(text=f"質問者: {interaction.user.display_name} ｜ キャラ設定: {character}")
+    await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="countdown", description="2027年までの残り時間をリアルタイムで表示します")
 async def countdown(interaction: discord.Interaction):
