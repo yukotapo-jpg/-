@@ -7,6 +7,7 @@ from discord.ext import tasks
 import datetime
 import random
 from rank_view import RankRecruitView, RoomControlView
+from poll_view import PollView
 
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -27,7 +28,7 @@ TARGET_UNIX = int(TARGET_DATE.timestamp())
 
 TOKEN = os.getenv("TOKEN")
 ANNOUNCE_CHANNEL_ID = 0 
-# ★専用チャンネルを作りたいカテゴリID（0のままだとコマンドを打った場所のカテゴリに作られます）
+# ★専用チャンネルを作りたいカテゴリID（設定済みの場合はその数字を入れてください）
 RECRUIT_CATEGORY_ID = 0
 
 def create_team_embed(members: list[str], team_count: int, title: str, reroll_count: int = 0) -> discord.Embed:
@@ -130,6 +131,20 @@ async def countdown(interaction: discord.Interaction):
     )
     await interaction.response.send_message(embed=embed)
 
+@bot.tree.command(name="poll", description="ボタンで投票できるリアルタイムアンケートを作成します")
+@app_commands.describe(
+    question="アンケートの質問内容",
+    option1="選択肢 1",
+    option2="選択肢 2",
+    option3="選択肢 3（省略可）",
+    option4="選択肢 4（省略可）",
+    option5="選択肢 5（省略可）"
+)
+async def create_poll(interaction: discord.Interaction, question: str, option1: str, option2: str, option3: str = None, option4: str = None, option5: str = None):
+    options = [opt for opt in [option1, option2, option3, option4, option5] if opt]
+    view = PollView(host=interaction.user, question=question, options=options)
+    await interaction.response.send_message(embed=view.build_embed(), view=view)
+
 @bot.tree.command(name="rank", description="専用テキスト＆VC付きのランク募集パネルを作成します")
 @app_commands.describe(
     game="ゲーム名（例: Valorant, Apex, スト6）",
@@ -147,7 +162,6 @@ async def rank_recruit(interaction: discord.Interaction, game: str, slots: app_c
 
     host = interaction.user
 
-    # カテゴリの取得（fetch_channelも使って確実に取得）
     category = None
     if RECRUIT_CATEGORY_ID != 0:
         target_cat = guild.get_channel(RECRUIT_CATEGORY_ID)
@@ -162,7 +176,6 @@ async def rank_recruit(interaction: discord.Interaction, game: str, slots: app_c
     if category is None and hasattr(interaction.channel, "category"):
         category = interaction.channel.category
 
-    # @everyone のIDは guild.id と同じなので discord.Object(id=guild.id) で確実に指定！
     overwrites = {
         discord.Object(id=guild.id): discord.PermissionOverwrite(view_channel=False),
         discord.Object(id=bot.user.id): discord.PermissionOverwrite(view_channel=True, send_messages=True, connect=True, speak=True, manage_channels=True),
