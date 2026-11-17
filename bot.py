@@ -27,8 +27,7 @@ TARGET_UNIX = int(TARGET_DATE.timestamp())
 
 TOKEN = os.getenv("TOKEN")
 ANNOUNCE_CHANNEL_ID = 0 
-# ★ここにカテゴリIDを入れてください（0のままだとコマンドを打った場所のカテゴリに作ります）
-RECRUIT_CATEGORY_ID = 1572151858246459572
+RECRUIT_CATEGORY_ID = 0
 
 def create_team_embed(members: list[str], team_count: int, title: str, reroll_count: int = 0) -> discord.Embed:
     shuffled = members.copy()
@@ -78,7 +77,7 @@ class RerollTeamView(discord.ui.View):
 class CountdownBot(discord.Client):
     def __init__(self):
         intents = discord.Intents.default()
-        intents.members = True  # メンバー情報の取得を安定させる
+        intents.members = True
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
         self.announced = False
@@ -146,18 +145,22 @@ async def rank_recruit(interaction: discord.Interaction, game: str, slots: app_c
         return
 
     host = interaction.user
-    bot_member = guild.me or guild.get_member(bot.user.id)
 
-    category = guild.get_channel(RECRUIT_CATEGORY_ID) if RECRUIT_CATEGORY_ID != 0 else interaction.channel.category
+    # カテゴリの取得（指定IDがカテゴリでなければ、自動で現在のカテゴリにフォールバック）
+    category = None
+    if RECRUIT_CATEGORY_ID != 0:
+        target_cat = guild.get_channel(RECRUIT_CATEGORY_ID)
+        if isinstance(target_cat, discord.CategoryChannel):
+            category = target_cat
+    if category is None and hasattr(interaction.channel, "category"):
+        category = interaction.channel.category
 
-    # 権限リストを安全に組み立てる（Noneが混ざらないようにチェック）
+    # 権限設定（discord.Objectを使ってNoneTypeエラーを完全に防止）
     overwrites = {
         guild.default_role: discord.PermissionOverwrite(view_channel=False),
+        discord.Object(id=bot.user.id): discord.PermissionOverwrite(view_channel=True, send_messages=True, connect=True, speak=True, manage_channels=True),
+        discord.Object(id=host.id): discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True, connect=True, speak=True)
     }
-    if bot_member:
-        overwrites[bot_member] = discord.PermissionOverwrite(view_channel=True, send_messages=True, connect=True, speak=True, manage_channels=True)
-    if host:
-        overwrites[host] = discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True, connect=True, speak=True)
 
     try:
         text_ch = await guild.create_text_channel(name=f"💬｜{game}-募集", category=category, overwrites=overwrites)
@@ -166,7 +169,9 @@ async def rank_recruit(interaction: discord.Interaction, game: str, slots: app_c
         await interaction.followup.send("❌ チャンネルを作成する権限がありません！Botのロールに「チャンネルの管理」または「管理者」権限を付けてください。")
         return
     except Exception as e:
-        await interaction.followup.send(f"❌ エラーが発生しました: `{e}`")
+        import traceback
+        err_detail = traceback.format_exc().splitlines()[-2:]
+        await interaction.followup.send(f"❌ エラーが発生しました: `{e}`\n```\n" + "\n".join(err_detail) + "\n```")
         return
 
     view = RankRecruitView(host=host, game=game, max_slots=slots, rank_req=rank, start_time=time, text_ch=text_ch, voice_ch=voice_ch)
