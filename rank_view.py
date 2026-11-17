@@ -16,7 +16,7 @@ class RoomControlView(discord.ui.View):
             await interaction.response.send_message("❌ すでに参加リストから抜けています。", ephemeral=True)
             return
 
-        await interaction.response.send_message("👋 専用ルームから退出しました！", ephemeral=True)
+        await interaction.response.send_message("👋 専用ルームから退出しました！（チャンネルが非表示になります）", ephemeral=True)
         await self.parent_view.remove_member_from_room(user)
 
     @discord.ui.button(label="💥 ルーム解散・チャンネル削除", style=discord.ButtonStyle.secondary)
@@ -81,16 +81,19 @@ class RankRecruitView(discord.ui.View):
         return embed
 
     async def grant_room_access(self, member: discord.Member):
+        target = discord.Object(id=member.id)
         if self.text_ch:
-            await self.text_ch.set_permissions(member, view_channel=True, send_messages=True, read_message_history=True)
+            await self.text_ch.set_permissions(target, view_channel=True, send_messages=True, read_message_history=True)
         if self.voice_ch:
-            await self.voice_ch.set_permissions(member, view_channel=True, connect=True, speak=True)
+            await self.voice_ch.set_permissions(target, view_channel=True, connect=True, speak=True)
 
     async def revoke_room_access(self, member: discord.Member):
+        target = discord.Object(id=member.id)
+        # ★ただ権限を消す(None)のではなく、明示的に「閲覧・接続を拒否(False)」にして完全に見えなくする！
         if self.text_ch:
-            await self.text_ch.set_permissions(member, overwrite=None)
+            await self.text_ch.set_permissions(target, view_channel=False, send_messages=False)
         if self.voice_ch:
-            await self.voice_ch.set_permissions(member, overwrite=None)
+            await self.voice_ch.set_permissions(target, view_channel=False, connect=False)
             if member.voice and member.voice.channel and member.voice.channel.id == self.voice_ch.id:
                 try:
                     await member.move_to(None)
