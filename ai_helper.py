@@ -10,7 +10,7 @@ def _call_gemini_sync(prompt: str, system_prompt: str) -> str:
 
     client = genai.Client(api_key=api_key)
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-3.8-flash",
         contents=prompt,
         config=types.GenerateContentConfig(
             system_instruction=system_prompt,
@@ -26,7 +26,6 @@ async def ask_gemini(prompt: str, character: str = "フレンドリーな友達"
         f"Discordのチャットで読みやすいように、簡潔で分かりやすくまとめてください。"
     )
     try:
-        # Botの動作を止めないように別スレッドで非同期実行する
         return await asyncio.to_thread(_call_gemini_sync, prompt, system_prompt)
     except Exception as e:
         return f"❌ AIとの通信中にエラーが発生しました: `{e}`"
