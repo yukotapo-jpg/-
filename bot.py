@@ -27,7 +27,7 @@ TARGET_UNIX = int(TARGET_DATE.timestamp())
 
 TOKEN = os.getenv("TOKEN")
 ANNOUNCE_CHANNEL_ID = 0 
-# ★さっき入力したカテゴリIDをここに入れておいてください！
+# ★ここにカテゴリIDを入れてください（0のままだとコマンドを打った場所のカテゴリに作ります）
 RECRUIT_CATEGORY_ID = 1572151858246459572
 
 def create_team_embed(members: list[str], team_count: int, title: str, reroll_count: int = 0) -> discord.Embed:
@@ -77,7 +77,9 @@ class RerollTeamView(discord.ui.View):
 
 class CountdownBot(discord.Client):
     def __init__(self):
-        super().__init__(intents=discord.Intents.default())
+        intents = discord.Intents.default()
+        intents.members = True  # メンバー情報の取得を安定させる
+        super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
         self.announced = False
 
@@ -136,19 +138,26 @@ async def countdown(interaction: discord.Interaction):
     time="開始時間（省略可）"
 )
 async def rank_recruit(interaction: discord.Interaction, game: str, slots: app_commands.Range[int, 1, 20], rank: str = "指定なし・誰でもOK", time: str = "集まり次第"):
-    # ★3秒ルール回避のため、まず「考え中...」を返して制限時間を延ばす！
     await interaction.response.defer()
 
     guild = interaction.guild
+    if not guild:
+        await interaction.followup.send("❌ このコマンドはサーバー内のチャンネルで実行してください！")
+        return
+
     host = interaction.user
+    bot_member = guild.me or guild.get_member(bot.user.id)
 
     category = guild.get_channel(RECRUIT_CATEGORY_ID) if RECRUIT_CATEGORY_ID != 0 else interaction.channel.category
 
+    # 権限リストを安全に組み立てる（Noneが混ざらないようにチェック）
     overwrites = {
         guild.default_role: discord.PermissionOverwrite(view_channel=False),
-        guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, connect=True, speak=True, manage_channels=True),
-        host: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True, connect=True, speak=True)
     }
+    if bot_member:
+        overwrites[bot_member] = discord.PermissionOverwrite(view_channel=True, send_messages=True, connect=True, speak=True, manage_channels=True)
+    if host:
+        overwrites[host] = discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True, connect=True, speak=True)
 
     try:
         text_ch = await guild.create_text_channel(name=f"💬｜{game}-募集", category=category, overwrites=overwrites)
