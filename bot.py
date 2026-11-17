@@ -27,7 +27,7 @@ TARGET_UNIX = int(TARGET_DATE.timestamp())
 
 TOKEN = os.getenv("TOKEN")
 ANNOUNCE_CHANNEL_ID = 0 
-# 専用チャンネルを作りたいカテゴリID（0のままだと、コマンドを打った場所と同じカテゴリ内に作られます）
+# ★さっき入力したカテゴリIDをここに入れておいてください！
 RECRUIT_CATEGORY_ID = 1572151858246459572
 
 def create_team_embed(members: list[str], team_count: int, title: str, reroll_count: int = 0) -> discord.Embed:
@@ -136,13 +136,14 @@ async def countdown(interaction: discord.Interaction):
     time="開始時間（省略可）"
 )
 async def rank_recruit(interaction: discord.Interaction, game: str, slots: app_commands.Range[int, 1, 20], rank: str = "指定なし・誰でもOK", time: str = "集まり次第"):
+    # ★3秒ルール回避のため、まず「考え中...」を返して制限時間を延ばす！
+    await interaction.response.defer()
+
     guild = interaction.guild
     host = interaction.user
 
-    # カテゴリを決定（指定があればそのカテゴリ、なければコマンドを実行した場所のカテゴリ）
     category = guild.get_channel(RECRUIT_CATEGORY_ID) if RECRUIT_CATEGORY_ID != 0 else interaction.channel.category
 
-    # 最初は全員非表示、募集主とBotだけアクセス可能な権限設定
     overwrites = {
         guild.default_role: discord.PermissionOverwrite(view_channel=False),
         guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, connect=True, speak=True, manage_channels=True),
@@ -153,14 +154,16 @@ async def rank_recruit(interaction: discord.Interaction, game: str, slots: app_c
         text_ch = await guild.create_text_channel(name=f"💬｜{game}-募集", category=category, overwrites=overwrites)
         voice_ch = await guild.create_voice_channel(name=f"🔊｜{game}-通話", category=category, overwrites=overwrites)
     except discord.Forbidden:
-        await interaction.response.send_message("❌ チャンネルを作成する権限がありません！Botのロールに「チャンネルの管理」または「管理者」権限を付けてください。", ephemeral=True)
+        await interaction.followup.send("❌ チャンネルを作成する権限がありません！Botのロールに「チャンネルの管理」または「管理者」権限を付けてください。")
+        return
+    except Exception as e:
+        await interaction.followup.send(f"❌ エラーが発生しました: `{e}`")
         return
 
     view = RankRecruitView(host=host, game=game, max_slots=slots, rank_req=rank, start_time=time, text_ch=text_ch, voice_ch=voice_ch)
-    await interaction.response.send_message(embed=view.build_embed(), view=view)
-    view.panel_message = await interaction.original_response()
+    panel_msg = await interaction.followup.send(embed=view.build_embed(), view=view, wait=True)
+    view.panel_message = panel_msg
 
-    # 専用テキストチャンネル内に「抜ける・解散」操作パネルを投稿
     room_embed = discord.Embed(
         title=f"🚪 【{game}】専用ルームへようこそ！",
         description=(
