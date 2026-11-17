@@ -27,6 +27,7 @@ TARGET_UNIX = int(TARGET_DATE.timestamp())
 
 TOKEN = os.getenv("TOKEN")
 ANNOUNCE_CHANNEL_ID = 0 
+# ★専用チャンネルを作りたいカテゴリID（0のままだとコマンドを打った場所のカテゴリに作られます）
 RECRUIT_CATEGORY_ID = 0
 
 def create_team_embed(members: list[str], team_count: int, title: str, reroll_count: int = 0) -> discord.Embed:
@@ -146,18 +147,24 @@ async def rank_recruit(interaction: discord.Interaction, game: str, slots: app_c
 
     host = interaction.user
 
-    # カテゴリの取得（指定IDがカテゴリでなければ、自動で現在のカテゴリにフォールバック）
+    # カテゴリの取得（fetch_channelも使って確実に取得）
     category = None
     if RECRUIT_CATEGORY_ID != 0:
         target_cat = guild.get_channel(RECRUIT_CATEGORY_ID)
+        if not target_cat:
+            try:
+                target_cat = await guild.fetch_channel(RECRUIT_CATEGORY_ID)
+            except Exception:
+                target_cat = None
         if isinstance(target_cat, discord.CategoryChannel):
             category = target_cat
+
     if category is None and hasattr(interaction.channel, "category"):
         category = interaction.channel.category
 
-    # 権限設定（discord.Objectを使ってNoneTypeエラーを完全に防止）
+    # @everyone のIDは guild.id と同じなので discord.Object(id=guild.id) で確実に指定！
     overwrites = {
-        guild.default_role: discord.PermissionOverwrite(view_channel=False),
+        discord.Object(id=guild.id): discord.PermissionOverwrite(view_channel=False),
         discord.Object(id=bot.user.id): discord.PermissionOverwrite(view_channel=True, send_messages=True, connect=True, speak=True, manage_channels=True),
         discord.Object(id=host.id): discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True, connect=True, speak=True)
     }
@@ -169,9 +176,7 @@ async def rank_recruit(interaction: discord.Interaction, game: str, slots: app_c
         await interaction.followup.send("❌ チャンネルを作成する権限がありません！Botのロールに「チャンネルの管理」または「管理者」権限を付けてください。")
         return
     except Exception as e:
-        import traceback
-        err_detail = traceback.format_exc().splitlines()[-2:]
-        await interaction.followup.send(f"❌ エラーが発生しました: `{e}`\n```\n" + "\n".join(err_detail) + "\n```")
+        await interaction.followup.send(f"❌ エラーが発生しました: `{e}`")
         return
 
     view = RankRecruitView(host=host, game=game, max_slots=slots, rank_req=rank, start_time=time, text_ch=text_ch, voice_ch=voice_ch)
