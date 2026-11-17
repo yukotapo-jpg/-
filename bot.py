@@ -5,6 +5,7 @@ import discord
 from discord import app_commands
 from discord.ext import tasks
 import datetime
+import random
 
 # --- RenderのWeb Service対策（簡易サーバー） ---
 class HealthCheckHandler(BaseHTTPRequestHandler):
@@ -25,13 +26,12 @@ JST = datetime.timezone(datetime.timedelta(hours=9))
 TARGET_DATE = datetime.datetime(2027, 1, 1, 0, 0, 0, tzinfo=JST)
 TARGET_UNIX = int(TARGET_DATE.timestamp())
 
-# Renderの環境変数からトークンを読み込む
 TOKEN = os.getenv("TOKEN")
-# 年越しメッセージを送りたいチャンネルのID（不要なら 0 のまま）
 ANNOUNCE_CHANNEL_ID = 0 
 
 class CountdownBot(discord.Client):
     def __init__(self):
+        # VCメンバー取得のためにdefaultインテンツを使用（追加の特権設定は不要です）
         super().__init__(intents=discord.Intents.default())
         self.tree = app_commands.CommandTree(self)
         self.announced = False
@@ -58,6 +58,7 @@ bot = CountdownBot()
 async def on_ready():
     print(f"ログインしました: {bot.user}")
 
+# 1. カウントダウンコマンド
 @bot.tree.command(name="countdown", description="2027年までの残り時間をリアルタイムで表示します")
 async def countdown(interaction: discord.Interaction):
     now = datetime.datetime.now(JST)
@@ -81,6 +82,54 @@ async def countdown(interaction: discord.Interaction):
         ),
         color=discord.Color.gold()
     )
+    await interaction.response.send_message(embed=embed)
+
+# チーム分け結果を見やすいEmbedにする共通関数
+def create_team_embed(members: list[str], team_count: int, title: str) -> discord.Embed:
+    random.shuffle(members)
+    teams = [members[i::team_count] for i in range(team_count)]
+    team_labels = ["🔴 チームA", "🔵 チームB", "🟢 チームC", "🟡 チームD", "🟣 チームE", "🟠 チームF"]
+
+    embed = discord.Embed(title=title, color=discord.Color.blurple())
+    for idx, team in enumerate(teams):
+        label = team_labels[idx] if idx < len(team_labels) else f"⚪ チーム{idx + 1}"
+        member_list = "\n".join(f"・{m}" for m in team) if team else "（メンバーなし）"
+        embed.add_field(name=f"{label}（{len(team)}人）", value=member_list, inline=True)
+    return embed
+
+# 2. VCメンバー自動チーム分けコマンド
+@bot.tree.command(name="team_vc", description="今入っているボイスチャンネルのメンバーを自動でチーム分けします")
+@app_commands.describe(teams="分けるチーム数（デフォルトは2チーム）", include_bots="Botもメンバーに含めるか")
+async def team_vc(interaction: discord.Interaction, teams: app_commands.Range[int, 2, 10] = 2, include_bots: bool = False):
+    if not interaction.user.voice or not interaction.user.voice.channel:
+        await interaction.response.send_message("❌ 先にボイスチャンネルに参加してからコマンドを実行してください！", ephemeral=True)
+        return
+
+    vc = interaction.user.voice.channel
+    members = [
+        m.display_name for m in vc.members
+        if include_bots or not m.bot
+    ]
+
+    if len(members) < teams:
+        await interaction.response.send_message(f"❌ メンバーが足りません（現在 {len(members)}人 / 必要 {teams}人以上）", ephemeral=True)
+        return
+
+    embed = create_team_embed(members, teams, f"🎲 ボイスチャンネル「{vc.name}」のチーム分け結果")
+    await interaction.response.send_message(embed=embed)
+
+# 3. テキスト入力チーム分けコマンド
+@bot.tree.command(name="team_text", description="入力した名前をスペース区切りでランダムにチーム分けします")
+@app_commands.describe(names="メンバーの名前（例: 田中 佐藤 鈴木 高橋）", teams="分けるチーム数（デフォルトは2チーム）")
+async def team_text(interaction: discord.Interaction, names: str, teams: app_commands.Range[int, 2, 10] = 2):
+    # 全角スペースも半角スペースに変換して分割
+    members = [name.strip() for name in names.replace("　", " ").split(" ") if name.strip()]
+
+    if len(members) < teams:
+        await interaction.response.send_message(f"❌ メンバーが足りません（現在 {len(members)}人 / 必要 {teams}人以上）", ephemeral=True)
+        return
+
+    embed = create_team_embed(members, teams, "🎲 メンバーのチーム分け結果")
     await interaction.response.send_message(embed=embed)
 
 bot.run(TOKEN)
