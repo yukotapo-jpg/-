@@ -1,3 +1,4 @@
+from call_view import CallRecruitView
 from ai_helper import ask_gemini
 import os
 import threading
@@ -106,6 +107,18 @@ bot = CountdownBot()
 @bot.event
 async def on_ready():
     print(f"ログインしました: {bot.user}")
+@bot.tree.command(name="call", description="気軽な通話募集パネルを作成します")
+@app_commands.describe(
+    topic="通話の内容（例: 雑談しよう、作業通話、暇な人おいで ※省略可）",
+    mention_role="通知したいロール（例: @通話勢 ※省略可）"
+)
+async def call_recruit(interaction: discord.Interaction, topic: str = "雑談・暇な人おいで！", mention_role: discord.Role = None):
+    host = interaction.user
+    vc = host.voice.channel if (host.voice and host.voice.channel) else None
+
+    view = CallRecruitView(host=host, topic=topic, vc_channel=vc)
+    content = mention_role.mention if mention_role else None
+    await interaction.response.send_message(content=content, embed=view.build_embed(), view=view)
 @bot.tree.command(name="ai", description="Gemini AIに質問や相談をします")
 @app_commands.describe(
     prompt="AIに聞きたいこと・お願いしたいこと",
