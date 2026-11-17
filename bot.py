@@ -71,7 +71,7 @@ class RerollTeamView(discord.ui.View):
         self.reroll_count += 1
         embed = create_team_embed(current_members, self.team_count, self.title, self.reroll_count)
         await interaction.response.edit_message(embed=embed, view=self)
-        class RankRecruitView(discord.ui.View):
+    class RankRecruitView(discord.ui.View):
     def __init__(self, host: discord.Member, game: str, max_slots: int, rank_req: str, start_time: str):
         super().__init__(timeout=43200)
         self.host = host
